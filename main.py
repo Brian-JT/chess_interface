@@ -11,6 +11,7 @@ global MoveInput, MoveCount, MoveList, Side, Material, WhitePieces, BlackPieces,
 
 class Tile:
     """Generic class for all board squares, holds piece and move count for said piece"""
+
     def __init__(self, piece: str, move: int):
         self.piece = piece
         self.move = move
@@ -81,8 +82,10 @@ def board_setup(start_fen: str):
     MoveInputList = []  # A list of coordinate notation for each prior move
     MoveCount = 0  # Each turn from each player adds 1
     piece_list = ["r", "n", "b", "q", "k", "b", "n", "r"]  # the standard layout of the back rank of the chess board
-    WhitePieces = [piece for piece in start_fen if piece.isupper() and piece.isalpha()]  # Generates a list of existing pieces on the board that are white
-    BlackPieces = [piece for piece in start_fen if piece.islower() and piece.isalpha()]  # Since it's symmetric, it just turns them all lowercase for initialization
+    WhitePieces = [piece for piece in start_fen if
+                   piece.isupper() and piece.isalpha()]  # Generates a list of existing pieces on the board that are white
+    BlackPieces = [piece for piece in start_fen if
+                   piece.islower() and piece.isalpha()]  # Since it's symmetric, it just turns them all lowercase for initialization
     array_from_fen(start_fen)
 
 
@@ -97,7 +100,8 @@ def array_from_fen(fen: str):
         piece_row = []
         for piece in row:
             if piece.isnumeric():
-                piece = [" " for _ in range(int(piece))]  # Turns numbers in the FEN that represents empty spots into single spaces in a list
+                piece = [" " for _ in range(
+                    int(piece))]  # Turns numbers in the FEN that represents empty spots into single spaces in a list
             for i in piece:
                 piece_row.append(i)
         piece_list.append(piece_row)
@@ -197,8 +201,10 @@ def game_init(start_fen: str):
 
     ttk.Style().theme_use("clam")  # Changes default them to "clam"
     style = ttk.Style()
-    style.configure("TLabel", fill=DarkModeBackground)  # Configures the default Label style to have the appropriate dark mode
-    style.configure(".", background=DarkModeBackground, foreground=DarkModeForeground, fieldbackground="#3A3733", highlightbackground="#3A3733")
+    style.configure("TLabel",
+                    fill=DarkModeBackground)  # Configures the default Label style to have the appropriate dark mode
+    style.configure(".", background=DarkModeBackground, foreground=DarkModeForeground, fieldbackground="#3A3733",
+                    highlightbackground="#3A3733")
 
     ContentFrame = ttk.Frame(Root, padding="12 12 12 7", style="TFrame")  # Creates a content frame to size everything
     ContentFrame.grid(column=0, row=0, sticky="NWES")
@@ -207,11 +213,13 @@ def game_init(start_fen: str):
     Root.rowconfigure(0, weight=1)
 
     InputGui = StringVar()  # Using an object of type StringVar() to receive input from the Entry box
-    InputEntry = Entry(ContentFrame, width=7, textvariable=InputGui, background="#3A3730", bd=1, foreground="#C3C3C2")  # Creates input Entry box
+    InputEntry = Entry(ContentFrame, width=7, textvariable=InputGui, background="#3A3730", bd=1,
+                       foreground="#C3C3C2")  # Creates input Entry box
     InputEntry.grid(column=2, row=3, sticky="W", pady="5")
     InputEntry.bind("<Return>", graphics_turn)  # Triggers the turn when enter is pressed
 
-    BoardCanvas = Canvas(ContentFrame, width=400 * BoardScalar, height=400 * BoardScalar, background=DarkModeBackground, highlightthickness=0)
+    BoardCanvas = Canvas(ContentFrame, width=400 * BoardScalar, height=400 * BoardScalar, background=DarkModeBackground,
+                         highlightthickness=0)
     BoardCanvas.grid(column=2, row=2, sticky="NWES")
 
     display_game()  # Displays the current board state
@@ -230,7 +238,8 @@ def blank_board():
             y1 = j * BoardScalar * 100
             y2 = y1 + BoardScalar * 50
             BoardCanvas.create_rectangle(x1, y1, x2, y2, width=0, fill="#566975", activefill="#8a9da8")
-            BoardCanvas.create_rectangle(x1 + BoardScalar * 50, y1 + 50 * BoardScalar, x2 + 50 * BoardScalar, y2 + 50 * BoardScalar, width=0, fill="#566975", activefill="#8a9da8")
+            BoardCanvas.create_rectangle(x1 + BoardScalar * 50, y1 + 50 * BoardScalar, x2 + 50 * BoardScalar,
+                                         y2 + 50 * BoardScalar, width=0, fill="#566975", activefill="#8a9da8")
 
     for j in range(0, 7):  # Creates the grid of dark squares
         for i in range(0, 5):
@@ -239,7 +248,8 @@ def blank_board():
             y1 = j * BoardScalar * 100
             y2 = y1 + BoardScalar * 50
             BoardCanvas.create_rectangle(x1, y1, x2, y2, width=0, fill="#455561", activefill="#798fa0")
-            BoardCanvas.create_rectangle(x1 + 50 * BoardScalar, y1 + 50 * BoardScalar, x2 + 50 * BoardScalar, y2 + 50 * BoardScalar, width=0, fill="#455561", activefill="#798fa0")
+            BoardCanvas.create_rectangle(x1 + 50 * BoardScalar, y1 + 50 * BoardScalar, x2 + 50 * BoardScalar,
+                                         y2 + 50 * BoardScalar, width=0, fill="#455561", activefill="#798fa0")
 
 
 def draw_pawn(row: int, column: int, color: bool):
@@ -413,7 +423,8 @@ def draw_queen(row: int, column: int, color: bool):
     BoardCanvas.create_line(q, r, s, t, width=3, fill=piece_color, activefill=highlight_color)
     BoardCanvas.create_line(u, v, w, x, width=3, fill=piece_color, activefill=highlight_color)
 
-    BoardCanvas.create_rectangle(a, b, c, d, fill=piece_color, activefill=highlight_color, outline=highlight_color)  # the body
+    BoardCanvas.create_rectangle(a, b, c, d, fill=piece_color, activefill=highlight_color,
+                                 outline=highlight_color)  # the body
     BoardCanvas.create_rectangle(e, f, g, h, fill=piece_color, activefill=highlight_color, outline=highlight_color)
     BoardCanvas.create_rectangle(i, j, k, l_, fill=piece_color, activefill=highlight_color, outline=highlight_color)
 
@@ -487,7 +498,7 @@ def check_move_input() -> str:
     return MoveInput
 
 
-def resign():
+def resign() -> bool:
     global CheckmateLabel, GameEnd
     pgn_str = ""
     if Side:
@@ -500,6 +511,7 @@ def resign():
     CheckmateLabel = ttk.Label(ContentFrame, text=pgn_str, style="TLabel")
     CheckmateLabel.grid(column=2, row=2, sticky="N")
     GameEnd = True
+    return True
 
 
 def play_move() -> bool:
@@ -642,7 +654,8 @@ def under_attack(piece_side: bool, row: int, column: int) -> bool:
     attacked = False
     # check for queens, rooks, and kings on rows and columns
     done = False
-    for row_i in range(row + 1, 8):  # generates row indices in the positive direction away from the piece and checks them
+    for row_i in range(row + 1,
+                       8):  # generates row indices in the positive direction away from the piece and checks them
         if not done:
             try:
                 opponent = GameArray[row_i][column].piece.isupper() != piece_side
@@ -975,7 +988,8 @@ def under_attack(piece_side: bool, row: int, column: int) -> bool:
         return False
 
 
-def put_king_in_check(k_row: int, k_col: int, row_1: int, col_1: int, row_2: int, col_2: int, piece_type: str, king_side: bool) -> bool:
+def put_king_in_check(k_row: int, k_col: int, row_1: int, col_1: int, row_2: int, col_2: int, piece_type: str,
+                      king_side: bool) -> bool:
     test_array = copy.deepcopy(GameArray)
     test_array[row_1][col_1].piece = " "
     test_array[row_2][col_2].piece = piece_type
@@ -1017,11 +1031,15 @@ def has_moves(row: int, col: int) -> bool:
                     continue
                 else:
                     square_is_attacked = under_attack(piece_side, k_row, k_col)
-                    square_piece_legal_enemy = GameArray[k_row][k_col].piece != " " and GameArray[k_row][k_col].piece.isupper() != GameArray[k_row][k_col].piece.isupper() and not under_attack(not Side, k_row, k_col)
+                    square_piece_legal_enemy = GameArray[k_row][k_col].piece != " " and GameArray[k_row][
+                        k_col].piece.isupper() != GameArray[k_row][k_col].piece.isupper() and not under_attack(not Side,
+                                                                                                               k_row,
+                                                                                                               k_col)
                     square_piece_empty = GameArray[k_row][k_col].piece == " "
                     if square_piece_empty or square_piece_legal_enemy:  # If king has legal move
                         if not square_is_attacked:
-                            print(914, f"legal king move to ({k_row},{k_col}) (row, col) from ({row}, {col}) piece_type:{piece_type}")
+                            print(914,
+                                  f"legal king move to ({k_row},{k_col}) (row, col) from ({row}, {col}) piece_type:{piece_type}")
                             return True
 
     elif piece_type.lower() == "n":  # Checks if a knight has any legal moves
@@ -1042,7 +1060,8 @@ def has_moves(row: int, col: int) -> bool:
                         is_empty = False
                         is_enemy = False
                     if is_enemy or is_empty:
-                        return not put_king_in_check(king_row, king_col, row, col, t_row, t_col, piece_type, king_side)  # Put check here for the king (discovered etc.)
+                        return not put_king_in_check(king_row, king_col, row, col, t_row, t_col, piece_type,
+                                                     king_side)  # Put check here for the king (discovered etc.)
 
     elif piece_type.lower() == "p":
         if piece_side:
@@ -1057,7 +1076,8 @@ def has_moves(row: int, col: int) -> bool:
                     if 7 >= col_direct + col >= 0:
                         target_square = GameArray[row + pawn_direction][col + col_direct].piece
                         if target_square != " " and target_square.isupper() != piece_side:  # Check if the pawn can capture a piece
-                            return not put_king_in_check(king_row, king_col, row, col, row + pawn_direction, col + col_direct, piece_type, king_side)
+                            return not put_king_in_check(king_row, king_col, row, col, row + pawn_direction,
+                                                         col + col_direct, piece_type, king_side)
 
     elif piece_type.lower() == "r":
         scan = [1, 2, 3, 4, 5, 6, 7, -1, -2, -3, -4, -5, -6, -7]
@@ -1089,7 +1109,8 @@ def has_moves(row: int, col: int) -> bool:
                     target_square = GameArray[bc_row][bc_col].piece
                     is_enemy = target_square.isupper() != piece_side
                     if target_square == " " or target_square != " " and is_enemy:
-                        return not put_king_in_check(king_row, king_col, row, col, row + offset * diag_mult, col + offset, piece_type, king_side)
+                        return not put_king_in_check(king_row, king_col, row, col, row + offset * diag_mult,
+                                                     col + offset, piece_type, king_side)
                     else:
                         continue
 
@@ -1118,7 +1139,8 @@ def has_moves(row: int, col: int) -> bool:
                     target_square = GameArray[row + offset * diag_mult][col + offset].piece
                     is_enemy = target_square.isupper() != piece_side
                     if target_square == " " or target_square != " " and is_enemy:
-                        return not put_king_in_check(king_row, king_col, row, col, row + offset * diag_mult, col + offset, piece_type, king_side)
+                        return not put_king_in_check(king_row, king_col, row, col, row + offset * diag_mult,
+                                                     col + offset, piece_type, king_side)
                     else:
                         continue
     return False  # if it gets to this point, no moves were found for the piece
@@ -1146,7 +1168,8 @@ def is_checkmate(checking_piece: str, a_row: int, a_col: int, k_row: int, k_col:
             elif 7 >= row >= 0:
                 continue
             else:
-                square_piece_legal = GameArray[row][col].piece != " " and GameArray[row][col].piece.isupper() != GameArray[k_row][k_col].piece.isupper() and not under_attack(not Side, row, col)
+                square_piece_legal = GameArray[row][col].piece != " " and GameArray[row][col].piece.isupper() != \
+                                     GameArray[k_row][k_col].piece.isupper() and not under_attack(not Side, row, col)
                 square_piece_empty = GameArray[row][col].piece == " " and not under_attack(not Side, row, col)
                 if square_piece_empty or square_piece_legal:  # if empty space adjacent, and not under check, the king can move out of check
                     return False
@@ -1242,7 +1265,8 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
     enemy_k_row = None
     enemy_k_col = None
 
-    backup_piece_1 = GameArray[row_1][column_1].piece  # Storing piece data so that the move can be reverted if it results in an illegal position
+    backup_piece_1 = GameArray[row_1][
+        column_1].piece  # Storing piece data so that the move can be reverted if it results in an illegal position
     backup_move_1 = GameArray[row_1][column_1].move
     backup_piece_2 = GameArray[row_2][column_2].piece
     backup_move_2 = GameArray[row_2][column_2].move
@@ -1431,7 +1455,8 @@ def bishop_move() -> bool:
     move_length = abs(start_row - target_row)
     piece_type = GameArray[start_row][start_column].piece
     target_piece = GameArray[target_row][target_column].piece
-    legal_target = (piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "b"  # true if legal move
+    legal_target = (
+                               piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "b"  # true if legal move
 
     if target_row < start_row:
         row_direction = -1
@@ -1460,7 +1485,8 @@ def queen_move() -> bool:
     column_direction = 1
     piece_type = GameArray[start_row][start_column].piece
     target_piece = GameArray[target_row][target_column].piece
-    legal_target = (piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "q"  # true if legal move
+    legal_target = (
+                               piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "q"  # true if legal move
 
     if target_row < start_row:
         row_direction = -1
@@ -1506,7 +1532,8 @@ def knight_move() -> bool:
     target_row = int(MoveInput[3]) - 1
     piece_type = GameArray[start_row][start_column].piece
     target_piece = GameArray[target_row][target_column].piece
-    legal_target = (target_piece.isupper() != piece_type.isupper() or target_piece == " ") and piece_type.lower() == "n"  # checks if the target square is empty or an opponent's piece
+    legal_target = (
+                               target_piece.isupper() != piece_type.isupper() or target_piece == " ") and piece_type.lower() == "n"  # checks if the target square is empty or an opponent's piece
 
     if target_row >= start_row:  # determines whether the row direction is up or down
         row_direction = 1
@@ -1634,7 +1661,9 @@ def castle(long: bool) -> bool:
 
     king_legal = GameArray[i][4].piece == king and GameArray[i][4].move == 0
     rook_legal = GameArray[i][rook_i].piece == rook and GameArray[i][rook_i].move == 0
-    checks = not under_attack(king.isupper(), i, 4) and not under_attack(king.isupper(), i, king_j) and not under_attack(king.isupper(), i, rook_j)
+    checks = not under_attack(king.isupper(), i, 4) and not under_attack(king.isupper(), i,
+                                                                         king_j) and not under_attack(king.isupper(), i,
+                                                                                                      rook_j)
     clear = GameArray[i][rook_j].piece == " " and GameArray[i][king_j].piece == " " and extra_clear
     print(1350, king_legal, rook_legal, checks, clear, GameArray[i][4].move == 0, GameArray[i][4].piece == king)
 
