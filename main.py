@@ -457,7 +457,7 @@ def check_move_input() -> str:
     """Verifies a move is a valid input, returns the piece string of the piece to be moved, or the special moves"""
     global MoveInput
     MoveInput = MoveInput.strip().casefold()
-    if MoveInput == "restart" or MoveInput == "exit" or MoveInput == "flip" or MoveInput == "o-o" or MoveInput == "o-o-o" or MoveInput == "draw":  # Checks if input is a special case
+    if MoveInput == "restart" or MoveInput == "exit" or MoveInput == "flip" or MoveInput == "o-o" or MoveInput == "o-o-o" or MoveInput == "resign":  # Checks if input is a special case
         return MoveInput
 
     valid_len = len(MoveInput) == 4 or len(MoveInput) == 5
@@ -487,12 +487,29 @@ def check_move_input() -> str:
     return MoveInput
 
 
+def resign():
+    global CheckmateLabel, GameEnd
+    pgn_str = ""
+    if Side:
+        pgn_str = "Resignation: black wins"
+    if not Side:
+        pgn_str = "Resignation: white wins"
+    MoveList.append(pgn_str)
+    save_game()
+    display_game()
+    CheckmateLabel = ttk.Label(ContentFrame, text=pgn_str, style="TLabel")
+    CheckmateLabel.grid(column=2, row=2, sticky="N")
+    GameEnd = True
+
+
 def play_move() -> bool:
     piece = check_move_input().lower()
     if piece == "exit":
         return False
     elif piece == "invalid":
         return False
+    elif piece == "resign":
+        return resign()
     elif piece == "o-o":
         return castle(False)
     elif piece == "o-o-o":
