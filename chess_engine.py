@@ -1,12 +1,31 @@
 from tkinter import *
 from tkinter import ttk
+from enum import Enum
 import datetime
+import time
 import copy
+import random
 
 global MoveInput, MoveCount, MoveList, Side, Material, WhitePieces, BlackPieces, Root, InputGui, GameArray, \
     BoardCanvas, InputEntry, WhiteColor, BlackColor, WhiteHighlight, BlackHighlight, ContentFrame, GameEnd, \
-    CheckmateLabel, DarkModeBackground, DarkModeForeground, CheckMoveLegality, AttackingCoords, BlockingTargetList, \
-    MoveInputList, BoardScalar, OldBoardStates, StartFen
+    CheckmateLabel, DarkModeBackground, DarkModeForeground, CheckMoveLegality, attacking_coords, BlockingTargetList, \
+    MoveInputList, BoardScalar, OldBoardStates, TotalEngineMs, TotalMoveCalcs
+
+
+class Piece(Enum):
+    EMPTY = 0
+    P = 1
+    N = 2
+    B = 3
+    R = 4
+    Q = 5
+    K = 6
+    p = 11
+    n = 12
+    b = 13
+    r = 14
+    q = 15
+    k = 16
 
 
 class Tile:
@@ -37,7 +56,17 @@ class Tile:
 
 def graphics_turn(*args):
     global MoveInput, BoardCanvas, InputEntry, MoveList, GameEnd, OldBoardStates
-    MoveInput = str(InputGui.get())
+    play_bot_w = True
+    play_bot_b = True
+    if play_bot_b and not Side and not GameEnd:
+        print(43, "asked engine for move for black")
+        MoveInput = engine_move(GameArray, Side)
+    elif play_bot_w and Side and not GameEnd:
+        print(47, "asked engine for move for white")
+        MoveInput = engine_move(GameArray, Side)
+    else:
+        print(46, "fetches player's move")
+        MoveInput = str(InputGui.get())
     print(39, MoveInput, "pre check")
     check_move_input()
     print(41, MoveInput, "post check")
@@ -53,7 +82,7 @@ def graphics_turn(*args):
             CheckmateLabel.destroy()
         GameEnd = False
         blank_board()
-        board_setup(StartFen)
+        board_setup("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq")
         display_game()
         InputEntry.delete(0, END)
         if MoveInput == "exit":
@@ -61,10 +90,10 @@ def graphics_turn(*args):
         return
 
     else:  # Standard move main loop (checks input, plays move, erases the board, redraws the board, erases input value)
-        print("Standard move:")
+        print(69, "Standard move:")
         if play_move():
             OldBoardStates.append(fen_from_array(Side))
-            print(66, OldBoardStates)
+            print(72, OldBoardStates)
         blank_board()
         display_game()
         InputEntry.delete(0, END)
@@ -73,9 +102,11 @@ def graphics_turn(*args):
 
 def board_setup(start_fen: str):
     """Sets up the Game Array, fresh"""
-    global MoveCount, MoveList, Side, Material, WhitePieces, BlackPieces, GameArray, CheckMoveLegality, MoveInputList, OldBoardStates
+    global MoveCount, MoveList, Side, Material, WhitePieces, BlackPieces, GameArray, CheckMoveLegality, MoveInputList, OldBoardStates, TotalEngineMs, AttackCalls
     Side = True  # True = white's turn
+    TotalEngineMs = 0.0
     OldBoardStates = [start_fen]
+    AttackCalls = 0
     CheckMoveLegality = False  # Used to modify under_check function to instead check for legal moves to a certain square
     Material = 0  # material advantage (positive is white)
     MoveList = []  # A list of moves played in each game, stored as a list of strings
@@ -91,29 +122,29 @@ def board_setup(start_fen: str):
 
 def array_from_fen(fen: str):
     """Resolves the GameArray from a standard FEN as a string"""
-    global GameArray
+    global GameArray, Side
+    Side = True if "w" in fen else False
     piece_row = []
     piece_list = []
-    inverse = [7, 6, 5, 4, 3, 2, 1, 0]
     fen = fen.split("/")
     for row in fen:
         piece_row = []
         for piece in row:
             if piece.isnumeric():
-                piece = [" " for _ in range(
-                    int(piece))]  # Turns numbers in the FEN that represents empty spots into single spaces in a list
+                piece = [" " for _ in range(int(piece))]  # Turns numbers in the FEN that represents empty spots into single spaces in a list
             for i in piece:
                 piece_row.append(i)
         piece_list.append(piece_row)
-    GameArray = [[Tile(piece_list[j][i], 0) for i in range(8)] for j in inverse]
+    GameArray = [[Tile(piece_list[7 - j][i], 0) for i in range(8)] for j in range(8)]
 
 
 def fen_from_array(side: bool) -> str:
+    print(116, "fen from array called")
     fen = []
-    inverse = [7, 6, 5, 4, 3, 2, 1, 0]
     board_pieces = ["b", "n", "k", "r", "q", "p"]
     blank_squares = 0
-    for row in inverse:
+    for row in range(8):
+        row = 7 - row
         for col in range(8):
             piece = GameArray[row][col].piece
             if piece.lower() in board_pieces:
@@ -168,6 +199,7 @@ def fen_from_array(side: bool) -> str:
 
 
 def is_threefold(current_fen: str) -> bool:
+    print(176, "is threefold called")
     repetitions = 0
     for i in range(len(OldBoardStates)):
         print(172, i, OldBoardStates[i], current_fen)
@@ -183,9 +215,8 @@ def is_threefold(current_fen: str) -> bool:
 def game_init(start_fen: str):
     """Initiates the Tkinter event loop (and thus the entire game)"""
     global Root, InputGui, BoardCanvas, InputEntry, WhiteColor, BlackColor, WhiteHighlight, BlackHighlight, \
-        ContentFrame, GameEnd, DarkModeBackground, DarkModeForeground, BoardScalar, StartFen
+        ContentFrame, GameEnd, DarkModeBackground, DarkModeForeground, BoardScalar
     board_setup(start_fen)
-    StartFen = start_fen
     GameEnd = False
 
     BoardScalar = 1.4  # Board scalar
@@ -229,6 +260,7 @@ def game_init(start_fen: str):
 
 def blank_board():
     """Creates the blank chess board with no pieces"""
+    print(238, "blank board called")
     global BoardCanvas
     BoardCanvas.delete("all")  # Clears old pieces and board
     for j in range(0, 7):  # Creates the grid of light squares
@@ -257,10 +289,10 @@ def draw_pawn(row: int, column: int, color: bool):
     global BoardCanvas
     row *= 50 * BoardScalar
     column *= 50 * BoardScalar
-    a = 22 * BoardScalar + column
+    a = 21 * BoardScalar + column
     b = 21 * BoardScalar + row
 
-    c = 30 * BoardScalar + column
+    c = 29 * BoardScalar + column
     d = 45 * BoardScalar + row
 
     if color:
@@ -465,19 +497,13 @@ def draw_knight(row: int, column: int, color: bool):
 
 
 def check_move_input() -> str:
-    """Verifies a move is a valid input, returns the piece string of the piece to be moved, or the special moves"""
+    """Verifies a move is a valid input, returns the valid input"""
     global MoveInput
+    print(474, f"check move input called for {MoveInput}")
     MoveInput = MoveInput.strip().casefold()
+    valid_len = len(MoveInput) == 4 or len(MoveInput) == 5
     if MoveInput == "restart" or MoveInput == "exit" or MoveInput == "flip" or MoveInput == "o-o" or MoveInput == "o-o-o" or MoveInput == "resign":  # Checks if input is a special case
         return MoveInput
-
-    valid_len = len(MoveInput) == 4 or len(MoveInput) == 5
-    if len(MoveInput) == 5:
-        try:
-            MoveInput[4]
-        except IndexError:
-            MoveInput += "q"
-            print(391, MoveInput, "idk how this would run")
 
     if valid_len and MoveInput[0].isalpha() and MoveInput[2].isalpha() and MoveInput[1].isnumeric() and MoveInput[3].isnumeric():  # Checks if format is proper coordinate notation
         start_col = column_index(MoveInput[0])
@@ -488,7 +514,7 @@ def check_move_input() -> str:
         in_bounds = 7 >= start_col >= 0 and 7 >= start_row >= 0 and 7 >= target_col >= 0 and 7 >= target_row >= 0  # Checks that it's within bounds
         correct_turn = Side and piece.isupper() or not Side and piece.islower()
         if in_bounds and correct_turn:
-            return piece
+            return MoveInput
         else:
             MoveInput = "invalid"
             print(405, MoveInput, f"in bounds:{in_bounds}, correct_turn:{correct_turn}")
@@ -500,6 +526,7 @@ def check_move_input() -> str:
 
 def resign() -> bool:
     global CheckmateLabel, GameEnd
+    print(511, "resign called")
     pgn_str = ""
     if Side:
         pgn_str = "Resignation: black wins"
@@ -515,18 +542,20 @@ def resign() -> bool:
 
 
 def play_move() -> bool:
-    piece = check_move_input().lower()
-    if piece == "exit":
+    print(524, f"play move called for move: {MoveInput}")
+    if MoveInput == "exit":
         return False
-    elif piece == "invalid":
+    elif MoveInput == "invalid":
         return False
-    elif piece == "resign":
+    elif MoveInput == "resign":
         return resign()
-    elif piece == "o-o":
+    elif MoveInput == "o-o":
         return castle(False)
-    elif piece == "o-o-o":
+    elif MoveInput == "o-o-o":
         return castle(True)
-    elif piece == "q":
+
+    piece = GameArray[int(MoveInput[1]) - 1][column_index(MoveInput[0])].piece.lower()
+    if piece == "q":
         return queen_move()
     elif piece == "r":
         return rook_move()
@@ -535,27 +564,27 @@ def play_move() -> bool:
     elif piece == "p":
         return pawn_move()
     elif piece == "k":
+        if abs(column_index(MoveInput[0]) - column_index(MoveInput[2])) == 2:
+            i_2 = column_index(MoveInput[2])
+            castle_side = False if i_2 == 6 else True
+            return castle(castle_side)
         return king_move()
     elif piece == "n":
         return knight_move()
     return False
 
 
+def ascii_debug_display(boardstate):
+    for i in range(1, 9):
+        print("\n", 8 - i, [boardstate[-i][j].piece for j in range(8)])
+    print("     0    1    2    3    4    5    6    7  \n")
+
+
 def display_game():
     """Displays the game board in ascii or graphically"""
-    material_update()
-    material_side = ""
     display_side = True  # Used to select which way the board will display (True is white perspective)
-
-    if Material > 0:
-        print(f"Material:{material_side}{Material}\n")
-    for i in range(1, 9):
-        print("\n", 8 - i, [GameArray[-i][j].piece for j in range(8)])
-    print("     0    1    2    3    4    5    6    7  \n")
-    if Material < 0:
-        print(f"Material:{material_side}{Material}\n")
-
     # Handles graphical board update
+    ascii_debug_display(GameArray)
     blank_board()
     if display_side:
         for i in range(8):
@@ -577,7 +606,7 @@ def display_game():
                 elif piece_type == " ":
                     pass
                 else:
-                    print(462, "display error")
+                    print(593, "display error")
     else:
         for i in range(1, 9):
             for j in range(1, 9):
@@ -596,31 +625,7 @@ def display_game():
                 elif GameArray[-i][-j].piece.lower() == " ":
                     pass
                 else:
-                    print("display error, functions.390")
-
-
-def material_update():
-    global Material
-    Material = 0
-    for row in range(8):
-        for column in range(8):
-            piece = GameArray[row][column].piece
-            if piece == "p":
-                Material -= 1
-            elif piece == "P":
-                Material += 1
-            elif piece == "B" or piece == "N":
-                Material += 3
-            elif piece == "b" or piece == "n":
-                Material -= 3
-            elif piece == "r":
-                Material -= 5
-            elif piece == "R":
-                Material += 5
-            elif piece == "q":
-                Material -= 9
-            elif piece == "Q":
-                Material += 9
+                    print(612, "display error")
 
 
 def column_index(column: str) -> int:
@@ -643,282 +648,97 @@ def index_column(index: int) -> str:
     return "a"
 
 
-def under_attack(piece_side: bool, row: int, column: int) -> bool:
+def under_attack(boardstate: list[list[Tile]], piece_side: bool, row: int, column: int) -> bool:
     """Determines if a square is under attack by any other pieces, returns True if yes"""
-    global CheckMoveLegality, AttackingCoords
-    reverse_row = [*range(0, row)]
-    reverse_row.reverse()
-    reverse_col = [*range(0, column)]
-    reverse_col.reverse()
+    # print(656, f"under attack called for piece at row {row} and column {column}")
+    global attacking_coords
     AttackingCoords = []
     attacked = False
     # check for queens, rooks, and kings on rows and columns
     done = False
-    for row_i in range(row + 1,
-                       8):  # generates row indices in the positive direction away from the piece and checks them
-        if not done:
-            try:
-                opponent = GameArray[row_i][column].piece.isupper() != piece_side
-                piece = GameArray[row_i][column].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "p" or piece == "n" and opponent or piece == "b" and opponent:
-                done = True
-            elif opponent and piece == "r":
-                AttackingCoords.append([row_i, column])
-                attacked = True
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row_i, column])
-                attacked = True
-                done = True
-            elif opponent and piece == "k" and row_i == row + 1:
-                AttackingCoords.append([row_i, column])
-                attacked = True
-                done = True
+    for direction in [-1, 1]:
+        for i in range(1,
+                       8):  # generates row indices in the positive and the negative direction away from the piece and checks them
+            row_i = row + i * direction
+            if not done and 7 >= row_i >= 0:
+                opponent = boardstate[row_i][column].piece.isupper() != piece_side
+                piece = boardstate[row_i][column].piece.lower()
+                if piece == " ":
+                    continue
+                elif piece != " " and not opponent:
+                    done = True
+                elif opponent and piece == "p" or piece == "n" and opponent or piece == "b" and opponent or piece == "k" and opponent:
+                    done = True
+                elif opponent and piece == "r":
+                    AttackingCoords.append([row_i, column])
+                    attacked = True
+                    done = True
+                elif opponent and piece == "q":
+                    AttackingCoords.append([row_i, column])
+                    attacked = True
+                    done = True
+                else:
+                    done = True
             else:
-                done = True
-        else:
-            pass
+                continue
 
     done = False
-    for row_i in reverse_row:  # generates row indices in the negative direction away from the piece and checks them
-        if not done:
-            try:
-                opponent = GameArray[row_i][column].piece.isupper() != piece_side
-                piece = GameArray[row_i][column].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "p" or piece == "n" and opponent or piece == "b" and opponent:
-                done = True
-            elif opponent and piece == "r":
-                AttackingCoords.append([row_i, column])
-                attacked = True
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row_i, column])
-                attacked = True
-                done = True
-            elif opponent and piece == "k" and row_i == row - 1:
-                AttackingCoords.append([row_i, column])
-                attacked = True
-                done = True
+    for direction in [-1, 1]:
+        for i in range(1,
+                       8):  # generates col indices in the positive and the negative direction away from the piece and checks them
+            col_i = column + i * direction
+            if not done and 7 >= col_i >= 0:
+                opponent = boardstate[row][col_i].piece.isupper() != piece_side
+                piece = boardstate[row][col_i].piece.lower()
+                if piece == " ":
+                    continue
+                elif piece != " " and not opponent:
+                    done = True
+                elif opponent and piece == "p" or piece == "n" and opponent or piece == "b" and opponent or piece == "k" and opponent:
+                    done = True
+                elif opponent and piece == "r":
+                    AttackingCoords.append([row, column])
+                    attacked = True
+                    done = True
+                elif opponent and piece == "q":
+                    AttackingCoords.append([row, column])
+                    attacked = True
+                    done = True
+                else:
+                    done = True
             else:
-                done = True
-        else:
-            pass
-
-    done = False
-    for column_i in range(column + 1, 8):  # generates column indices in the positive direction away from the piece
-        if not done:
-            try:
-                opponent = GameArray[row][column_i].piece.isupper() != piece_side
-                piece = GameArray[row][column_i].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
                 continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "p" or piece == "n" and opponent or piece == "b" and opponent:
-                done = True
-            elif opponent and piece == "r":
-                AttackingCoords.append([row, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "k" and column_i == column + 1:
-                AttackingCoords.append([row, column_i])
-                attacked = True
-                done = True
-            else:
-                done = True
-        else:
-            pass
-
-    done = False
-    for column_i in reverse_col:  # generates column indices in the negative direction away from the piece
-        if not done:
-            try:
-                opponent = GameArray[row][column_i].piece.isupper() != piece_side
-                piece = GameArray[row][column_i].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "p" or piece == "n" and opponent or piece == "b" and opponent:
-                done = True
-            elif opponent and piece == "r":
-                AttackingCoords.append([row, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "k" and column_i == column - 1:
-                AttackingCoords.append([row, column_i])
-                attacked = True
-                done = True
-            else:
-                done = True
-        else:
-            pass
 
     done = False
     # checks each diagonal direction
-    for row_i in range(row + 1, 8):  # + +
-        difference = row_i - row
-        column_i = column + difference
-        if column_i > 7 or column_i < 0:
-            done = True
-        if row_i < 0 or row_i > 7:
-            done = True
-        if not done:
-            try:
-                opponent = GameArray[row_i][column_i].piece.isupper() != piece_side
-                piece = GameArray[row_i][column_i].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "r" or opponent and piece == "n" or opponent and piece == "k" or opponent and piece == "p":
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "b":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            else:
-                done = True
-        else:
-            pass
+    for xi in [-1, 1]:
+        for yi in [-1, 1]:
+            for i in range(1, 8):
+                row_i = row + i * yi
+                col_i = column + i * xi
+                if 7 >= row_i >= 0 and 7 >= col_i >= 0 and not done:
+                    opponent = boardstate[row_i][col_i].piece.isupper() != piece_side
+                    piece = boardstate[row_i][col_i].piece.lower()
+                    if piece == " ":
+                        continue
+                    elif piece != " " and not opponent:
+                        done = True
+                    elif opponent and piece == "r" or opponent and piece == "n" or opponent and piece == "k" or opponent and piece == "p":
+                        done = True
+                    elif opponent and piece == "q":
+                        AttackingCoords.append([row_i, col_i])
+                        attacked = True
+                        done = True
+                    elif opponent and piece == "b":
+                        AttackingCoords.append([row_i, col_i])
+                        attacked = True
+                        done = True
+                    else:
+                        done = True
+                else:
+                    pass
 
     done = False
-    for row_i in range(row + 1, 8):  # + -
-        difference = row_i - row
-        column_i = column - difference
-        if column_i > 7 or column_i < 0:
-            done = True
-        if row_i < 0 or row_i > 7:
-            done = True
-        if not done:
-            try:
-                opponent = GameArray[row_i][column_i].piece.isupper() != piece_side
-                piece = GameArray[row_i][column_i].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "r" or opponent and piece == "n" or opponent and piece == "k" or opponent and piece == "p":
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "b":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            else:
-                done = True
-        else:
-            pass
-
-    done = False
-    for row_i in reverse_row:  # - -
-        difference = row - row_i
-        column_i = column - difference
-        if column_i > 7 or column_i < 0:
-            done = True
-        if row_i < 0 or row_i > 7:
-            done = True
-        if not done:
-            try:
-                opponent = GameArray[row_i][column_i].piece.isupper() != piece_side
-                piece = GameArray[row_i][column_i].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "r" or opponent and piece == "n" or opponent and piece == "k" or opponent and piece == "p":
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "b":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            else:
-                done = True
-        else:
-            pass
-
-    done = False
-    for row_i in reverse_row:  # - +
-        difference = row - row_i
-        column_i = column + difference
-        if column_i > 7 or column_i < 0:
-            done = True
-        if row_i < 0 or row_i > 7:
-            done = True
-        if not done:
-            try:
-                opponent = GameArray[row_i][column_i].piece.isupper() != piece_side
-                piece = GameArray[row_i][column_i].piece.lower()
-            except IndexError:
-                opponent = False
-                piece = False
-            if piece == " ":
-                continue
-            elif piece != " " and not opponent:
-                done = True
-            elif opponent and piece == "r" or opponent and piece == "n" or opponent and piece == "k" or opponent and piece == "p":
-                done = True
-            elif opponent and piece == "q":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            elif opponent and piece == "b":
-                AttackingCoords.append([row_i, column_i])
-                attacked = True
-                done = True
-            else:
-                done = True
-        else:
-            pass
-
     # checks for knights in either of the 8 possible squares
     offset_list = [-2, -1, 1, 2]
     for offset_row in offset_list:
@@ -927,42 +747,23 @@ def under_attack(piece_side: bool, row: int, column: int) -> bool:
             t_col = offset_col + column
             if abs(offset_row) == abs(offset_col):
                 continue
-            elif t_col > 7 or t_col < 0 or t_row > 7 or t_row < 0:
-                continue
-            else:
-                try:
-                    opponent = GameArray[t_row][t_col].piece.isupper() != piece_side
-                    is_knight = GameArray[t_row][t_col].piece.lower() == "n"
-                except LookupError:
-                    is_knight = False
-                    opponent = False
+            elif 7 >= t_row >= 0 and 7 >= t_col >= 0:
+                opponent = boardstate[t_row][t_col].piece.isupper() != piece_side
+                is_knight = boardstate[t_row][t_col].piece.lower() == "n"
                 if opponent and is_knight:
                     AttackingCoords.append([t_row, t_col])
                     attacked = True
 
     # checks for pawns, based on which side matters. If Check_Move_Legality == True, it will instead check pawn movement not pawn attack pattern
-    if not CheckMoveLegality:
-        pawn_col_list = [-1, 1]
-        mult = [1]
-    else:
-        pawn_col_list = [0]
-        mult = [1, 2]
-    pawn_direct = -1
-    if piece_side:
-        pawn_direct = 1
-    for multiplier in mult:
-        for i in pawn_col_list:
-            pawn_direct *= multiplier
-            pawn_row = row + pawn_direct
-            pawn_col = i + column
-            try:
-                pawn_check = GameArray[pawn_row][pawn_col].piece.lower() == "p"
-                opponent = GameArray[pawn_row][pawn_col].piece.isupper() != piece_side
-            except IndexError:
-                pawn_check = False
-                opponent = False
+    pawn_direct = 1 if piece_side else -1
+    for i in [-1, 1]:
+        row_i = row + pawn_direct
+        col_i = column + i
+        if 7 >= row_i >= 0 and 7 >= col_i >= 0:
+            pawn_check = boardstate[row_i][col_i].piece.lower() == "p"
+            opponent = boardstate[row_i][col_i].piece.isupper() != piece_side
             if pawn_check and opponent:
-                AttackingCoords.append([pawn_row, pawn_col])
+                AttackingCoords.append([row_i, col_i])
                 attacked = True
 
     # Checks for kings
@@ -970,77 +771,111 @@ def under_attack(piece_side: bool, row: int, column: int) -> bool:
         for col_offset in [-1, 0, 1]:
             k_col = col_offset + column
             k_row = row_offset + row
-            if row_offset == 0 and col_offset == 0:
-                continue
-            elif k_col > 7 or k_col < 0:
-                continue
-            elif k_row > 7 or k_row < 0:
-                continue
-            else:
-                square_is_king = GameArray[k_row][k_col].piece.lower() == "k"
-                is_enemy_king = GameArray[k_row][k_col].piece.isupper() != piece_side
-                if square_is_king and is_enemy_king:  # Enemy king found next to SOI
+            is_move = k_row != row or k_col != column
+            if 7 >= k_col >= 0 and 7 >= k_row >= 0 and is_move:
+                is_king = boardstate[k_row][k_col].piece.lower() == "k"
+                is_enemy_king = boardstate[k_row][k_col].piece.isupper() != piece_side
+                if is_king and is_enemy_king:  # Enemy king found next to SOI
                     attacked = True
+                    AttackingCoords.append([k_row, k_col])
 
-    if attacked:
-        return True
-    else:
-        return False
+    return True if attacked else False
 
 
-def put_king_in_check(k_row: int, k_col: int, row_1: int, col_1: int, row_2: int, col_2: int, piece_type: str,
+def put_king_in_check(test_array: list[list[Tile]], row_1: int, col_1: int, row_2: int, col_2: int, piece_type: str,
                       king_side: bool) -> bool:
-    test_array = copy.deepcopy(GameArray)
-    test_array[row_1][col_1].piece = " "
-    test_array[row_2][col_2].piece = piece_type
-    in_check = under_attack(king_side, k_row, k_col)
-    print(875, in_check)
+    # print(1002, f"put king in check called for move {index_column(col_1)}{row_1 + 1}{index_column(col_2)}{row_2 + 1}, with king on {index_column(k_col)}{k_row}")
+    start_piece = test_array[row_1][col_1].piece
+    end_piece = test_array[row_2][col_2].piece
+    start_move = test_array[row_1][col_1].move
+    end_move = test_array[row_2][col_2].move
+    test_array = simple_update(test_array, row_1, col_1, row_2, col_2)
+    k_row = None
+    k_col = None
+    for i in range(8):
+        for j in range(8):
+            if test_array[i][j].piece.lower() == "k" and test_array[i][j].piece.isupper() == king_side:
+                k_row = i
+                k_col = j
+    if k_row is None or k_col is None:
+        test_array[row_1][col_1].piece = start_piece
+        test_array[row_2][col_2].piece = end_piece
+        test_array[row_1][col_1].move = start_move
+        test_array[row_2][col_2].move = end_move
+        return True
+    in_check = under_attack(test_array, king_side, k_row, k_col)
+    test_array[row_1][col_1].piece = start_piece
+    test_array[row_2][col_2].piece = end_piece
+    test_array[row_1][col_1].move = start_move
+    test_array[row_2][col_2].move = end_move
+    # ascii_debug_display(test_array)
+    # print(771, row_1, col_1, row_2, col_2, k_row, k_col, "row 1, col 1, row 2, col 2, k row, k col")
+    # print(772, king_side, in_check, piece_type, "king side, in check, piece type")
+    # print(1025, in_check, king_side)
     return in_check
 
 
-def has_moves(row: int, col: int) -> bool:
-    """Checks if the piece at the coordinates has any legal moves"""
-    piece_type = GameArray[row][col].piece
-    piece_side = piece_type.isupper()
-    king_col = None
-    king_row = None
-    king_side = None
-    print(886, f"called has_moves at ({row},{col}) (row, col)")
+def has_moves(boardstate: list[list[Tile]], row: int, col: int) -> list[str]:
+    """Checks if the piece at the coordinates has any legal moves. Returns a list of target coordinates for each legal move it does have, ie ['e3', 'e4'] """
+    piece_type = boardstate[row][col].piece
+    piece_side = boardstate[row][col].piece.isupper()
+    legal_move_list = []
 
-    for i in range(8):  # Finds the relevant king, to check if the king is put in check by any of these potential moves
-        for j in range(8):
-            found_king = GameArray[i][j].piece
-            king_side = found_king.isupper()
-            if found_king == "k" and king_side == piece_side or found_king == "K" and king_side == piece_side:
-                king_col = j
-                king_row = i
+    if piece_type.lower() == " ":  # Empty square has no moves
+        return []
 
-    if piece_type == " ":  # Empty square has no moves
-        return False
-
-    elif piece_type.lower() == "k":  # Checks if a king has any legal moves
+    if piece_type.lower() == "k":  # Checks if a king has any legal moves
+        print(798, row, col)
         for row_offset in [-1, 0, 1]:
+            k_row = row_offset + row
             for col_offset in [-1, 0, 1]:
                 k_col = col_offset + col
-                k_row = row_offset + row
-                if row_offset == 0 and col_offset == 0:
-                    continue
-                elif k_col > 7 or k_col < 0:
-                    continue
-                elif k_row > 7 or k_row < 0:
-                    continue
-                else:
-                    square_is_attacked = under_attack(piece_side, k_row, k_col)
-                    square_piece_legal_enemy = GameArray[k_row][k_col].piece != " " and GameArray[k_row][
-                        k_col].piece.isupper() != GameArray[k_row][k_col].piece.isupper() and not under_attack(not Side,
-                                                                                                               k_row,
-                                                                                                               k_col)
-                    square_piece_empty = GameArray[k_row][k_col].piece == " "
-                    if square_piece_empty or square_piece_legal_enemy:  # If king has legal move
-                        if not square_is_attacked:
-                            print(914,
-                                  f"legal king move to ({k_row},{k_col}) (row, col) from ({row}, {col}) piece_type:{piece_type}")
-                            return True
+                is_move = row_offset != 0 or col_offset != 0
+                if 7 >= k_col >= 0 and 7 >= k_row >= 0 and is_move:
+                    print(805, k_row, k_col)
+                    is_in_check = put_king_in_check(boardstate, k_row, k_col, row, col, piece_type, piece_side)
+                    legal_enemy = boardstate[k_row][k_col].piece != " " and boardstate[k_row][
+                        k_col].piece.isupper() != piece_side and not under_attack(boardstate, piece_side, k_row, k_col)
+                    is_empty = boardstate[k_row][k_col].piece == " "
+                    print(809, k_row, k_col, is_in_check, legal_enemy, is_empty)
+                    if is_empty or legal_enemy:  # If king has legal move
+                        if not is_in_check:
+                            print(1085, index_column(k_col), k_row + 1)
+                            # print(914, f"legal king move to ({k_row},{k_col}) (row, col) from ({row}, {col}) piece_type:{piece_type}")
+                            legal_move_list.append(f"{index_column(k_col)}{k_row + 1}")
+                        else:
+                            print(1087)
+        i = 0  #
+        rook = "R"
+        king = "K"
+        king_j = 2
+        rook_i = 0
+        rook_j = 3
+        extra_clear = boardstate[i][1].piece == " "
+        for long in [True, False]:
+            if not Side:
+                i = 7
+                rook = "r"
+                king = "k"
+            if not long:
+                king_j = 6
+                rook_i = 7
+                rook_j = 5
+                extra_clear = True
+
+            king_legal = boardstate[i][4].piece == king and boardstate[i][4].move == 0
+            rook_legal = boardstate[i][rook_i].piece == rook and boardstate[i][rook_i].move == 0
+            checks = not under_attack(boardstate, king.isupper(), i, 4) and not under_attack(boardstate, king.isupper(), i, king_j) \
+                and not under_attack(boardstate, king.isupper(), i, rook_j)
+            clear = boardstate[i][rook_j].piece == " " and boardstate[i][king_j].piece == " " and extra_clear
+            # print(1350, king_legal, rook_legal, checks, clear, GameArray[i][4].move == 0, GameArray[i][4].piece == king)
+
+            if king_legal and rook_legal and checks and clear and long:
+                legal_move_list.append(f"c{i + 1}")
+            if king_legal and rook_legal and checks and clear and not long:
+                legal_move_list.append(f"g{i + 1}")
+
+        return legal_move_list
 
     elif piece_type.lower() == "n":  # Checks if a knight has any legal moves
         offset_list = [-2, -1, 1, 2]
@@ -1050,111 +885,167 @@ def has_moves(row: int, col: int) -> bool:
                 t_col = offset_col + col
                 if abs(offset_row) == abs(offset_col):
                     continue
-                elif t_col > 7 or t_col < 0 or t_row > 7 or t_row < 0:
-                    continue
-                else:
-                    try:
-                        is_enemy = GameArray[t_row][t_col].piece.isupper() != piece_side
-                        is_empty = GameArray[t_row][t_col].piece.lower() == " "
-                    except LookupError:
-                        is_empty = False
-                        is_enemy = False
+                elif 7 >= t_col >= 0 and 7 >= t_row >= 0:
+                    is_empty = boardstate[t_row][t_col].piece.lower() == " "
+                    is_enemy = boardstate[t_row][t_col].piece.isupper() != piece_side and not is_empty
                     if is_enemy or is_empty:
-                        return not put_king_in_check(king_row, king_col, row, col, t_row, t_col, piece_type,
-                                                     king_side)  # Put check here for the king (discovered etc.)
+                        if not put_king_in_check(boardstate, row, col, t_row, t_col, piece_type, piece_side):
+                            legal_move_list.append(f"{index_column(t_col)}{t_row + 1}")
+        return legal_move_list
 
     elif piece_type.lower() == "p":
-        if piece_side:
-            pawn_direction = 1
-        else:
-            pawn_direction = -1
-        if 7 >= row + pawn_direction >= 0:
-            if GameArray[row + pawn_direction][col].piece == " ":  # Check if the pawn can move forward
-                return True  # Put check here for the king (discovered etc.)
-            else:
-                for col_direct in [-1, 1]:
-                    if 7 >= col_direct + col >= 0:
-                        target_square = GameArray[row + pawn_direction][col + col_direct].piece
-                        if target_square != " " and target_square.isupper() != piece_side:  # Check if the pawn can capture a piece
-                            return not put_king_in_check(king_row, king_col, row, col, row + pawn_direction,
-                                                         col + col_direct, piece_type, king_side)
+        done = False
+        pawn_direction = 1 if piece_side else -1
+        for m in [1, 2]:
+            offset_row = row + pawn_direction * m
+            if 7 >= offset_row >= 0:
+                if boardstate[offset_row][col].piece == " " and not done:  # Check if the pawn can move forward
+                    if not put_king_in_check(boardstate, row, col, offset_row, col, piece_type, piece_side):
+                        if m == 1 or m == 2 and boardstate[row][col].move == 0:
+                            legal_move_list.append(f"{index_column(col)}{offset_row + 1}")
+                    else:
+                        done = True
+                else:
+                    done = True
+        for col_direct in [-1, 1]:  # for diagonal attacks
+            offset_col = col + col_direct
+            if 7 >= offset_col >= 0 and 7 >= row + pawn_direction >= 0:
+                target_square = boardstate[row + pawn_direction][offset_col].piece
+                if target_square != " " and target_square.isupper() != piece_side:  # Check if the pawn can capture a piece
+                    print(1131)
+                    if not put_king_in_check(boardstate, row, col, row + pawn_direction,
+                                             col + col_direct, piece_type, piece_side):
+                        print(1133)
+                        legal_move_list.append(f"{index_column(offset_col)}{row + pawn_direction + 1}")
+        return legal_move_list
 
     elif piece_type.lower() == "r":
-        scan = [1, 2, 3, 4, 5, 6, 7, -1, -2, -3, -4, -5, -6, -7]
-        for offset in scan:
-            if 7 >= row + offset >= 0:
-                target_square = GameArray[row + offset][col].piece
-                is_enemy = target_square.isupper() != piece_side
-                if target_square == " " or target_square != " " and is_enemy:
-                    return not put_king_in_check(king_row, king_col, row, col, row + offset, col, piece_type, king_side)
-                else:
-                    continue
-        for offset in scan:
-            if 7 >= col + offset >= 0:
-                target_square = GameArray[row][col + offset].piece
-                is_enemy = target_square.isupper() != piece_side
-                if target_square == " " or target_square != " " and is_enemy:
-                    return not put_king_in_check(king_row, king_col, row, col, row, col + offset, piece_type, king_side)
-                else:
-                    continue
+        for i in [-1, 1]:  # positive and negative direction
+            done = False
+            for offset in range(1, 8):
+                offset_row = row + offset * i
+                if 7 >= offset_row >= 0 and not done:
+                    target_square = boardstate[offset_row][col].piece
+                    is_enemy = target_square.isupper() != piece_side
+                    if target_square == " " or (target_square != " " and is_enemy):
+                        if target_square != " ":
+                            done = True
+                        if not put_king_in_check(boardstate, row, col, offset_row, col, piece_type, piece_side):
+                            legal_move_list.append(f"{index_column(col)}{offset_row + 1}")
+                    else:
+                        done = True
+                        continue
+
+            done = False
+            for offset in range(1, 8):
+                offset_col = col + offset * i
+                if 7 >= offset_col >= 0 and not done:
+                    target_square = boardstate[row][offset_col].piece
+                    is_enemy = target_square.isupper() != piece_side
+                    if target_square == " " or (target_square != " " and is_enemy):
+                        if target_square != " ":
+                            done = True
+                        if not put_king_in_check(boardstate, row, col, row, offset_col, piece_type, piece_side):
+                            legal_move_list.append(f"{index_column(offset_col)}{row + 1}")
+                    else:
+                        done = True
+                        continue
+        return legal_move_list
 
     elif piece_type.lower() == "b":
-        scan = [1, 2, 3, 4, 5, 6, 7, -1, -2, -3, -4, -5, -6, -7]
-        diag_scan = [1, -1]
-        for offset in scan:
-            for diag_mult in diag_scan:
-                bc_row = row + offset * diag_mult
-                bc_col = col + offset
-                if 7 >= bc_row >= 0 and 7 >= bc_col >= 0:
-                    target_square = GameArray[bc_row][bc_col].piece
-                    is_enemy = target_square.isupper() != piece_side
-                    if target_square == " " or target_square != " " and is_enemy:
-                        return not put_king_in_check(king_row, king_col, row, col, row + offset * diag_mult,
-                                                     col + offset, piece_type, king_side)
-                    else:
-                        continue
+        for i in [-1, 1]:
+            for diag_mult in [-1, 1]:
+                done = False
+                for offset in range(1, 8):  # flip directions
+                    bc_row = row + offset * i * diag_mult
+                    bc_col = col + offset * i
+                    if 7 >= bc_row >= 0 and 7 >= bc_col >= 0 and not done:
+                        target_square = boardstate[bc_row][bc_col].piece
+                        is_enemy = target_square.isupper() != piece_side
+                        if target_square == " " or (target_square != " " and is_enemy):
+                            if target_square != " ":
+                                done = True
+                            if not put_king_in_check(boardstate, row, col, bc_row, bc_col,
+                                                     piece_type, piece_side):
+                                legal_move_list.append(f"{index_column(bc_col)}{bc_row + 1}")
+                        else:
+                            done = True
+                            continue
+        return legal_move_list
 
     elif piece_type.lower() == "q":
-        scan = [1, 2, 3, 4, 5, 6, 7, -1, -2, -3, -4, -5, -6, -7]
-        diag_scan = [1, -1]
-        for offset in scan:
-            if 7 >= row + offset >= 0:
-                target_square = GameArray[row + offset][col].piece
-                is_enemy = target_square.isupper() != piece_side
-                if target_square == " " or target_square != " " and is_enemy:
-                    return not put_king_in_check(king_row, king_col, row, col, row + offset, col, piece_type, king_side)
-                else:
-                    continue
-        for offset in scan:
-            if 7 >= col + offset >= 0:
-                target_square = GameArray[row][col + offset].piece
-                is_enemy = target_square.isupper() != piece_side
-                if target_square == " " or target_square != " " and is_enemy:
-                    return not put_king_in_check(king_row, king_col, row, col, row, col + offset, piece_type, king_side)
-                else:
-                    continue
-        for offset in scan:
-            for diag_mult in diag_scan:
-                if 7 >= row + offset >= 0:
-                    target_square = GameArray[row + offset * diag_mult][col + offset].piece
+        for i in [-1, 1]:
+            done = False
+            for offset in range(1, 8):
+                offset_row = row + offset * i
+                if 7 >= offset_row >= 0 and not done:
+                    target_square = boardstate[offset_row][col].piece
                     is_enemy = target_square.isupper() != piece_side
                     if target_square == " " or target_square != " " and is_enemy:
-                        return not put_king_in_check(king_row, king_col, row, col, row + offset * diag_mult,
-                                                     col + offset, piece_type, king_side)
+                        if target_square != " ":
+                            done = True
+                        if not put_king_in_check(boardstate, row, col, offset_row, col, piece_type, piece_side):
+                            legal_move_list.append(f"{index_column(col)}{offset_row + 1}")
                     else:
+                        done = True
                         continue
-    return False  # if it gets to this point, no moves were found for the piece
+
+            done = False
+            for offset in range(1, 8):
+                offset_col = col + offset * i
+                if 7 >= offset_col >= 0 and not done:
+                    target_square = boardstate[row][offset_col].piece
+                    is_enemy = target_square.isupper() != piece_side
+                    if target_square == " " or target_square != " " and is_enemy:
+                        if target_square != " ":
+                            done = True
+                        if not put_king_in_check(boardstate, row, col, row, offset_col, piece_type, piece_side):
+                            legal_move_list.append(f"{index_column(offset_col)}{row + 1}")
+                    else:
+                        done = True
+                        continue
+
+            for diag_mult in [-1, 1]:
+                done = False
+                for offset in range(1, 8):
+                    offset_row = row + offset * diag_mult
+                    offset_col = col + offset * i
+                    print(1238, offset_row, offset_col, diag_mult, i, offset)
+                    if 7 >= offset_row >= 0 and 7 >= offset_col >= 0 and not done:
+                        print(1240, "in bounds")
+                        target_square = boardstate[offset_row][offset_col].piece
+                        print(1242, target_square)
+                        is_enemy = target_square.isupper() != piece_side
+                        print(1244, is_enemy)
+                        if target_square == " " or (target_square != " " and is_enemy):
+                            if target_square != " ":
+                                done = True
+                            if not put_king_in_check(boardstate, row, col, offset_row, offset_col, piece_type,
+                                                     piece_side):
+                                print(1250, "added to legal move list")
+                                legal_move_list.append(f"{index_column(offset_col)}{offset_row + 1}")
+                        else:
+                            done = True
+                            continue
+
+    return legal_move_list  # if it gets to this point, no moves were found for the piece
 
 
-def is_checkmate(checking_piece: str, a_row: int, a_col: int, k_row: int, k_col: int) -> bool:
+def is_checkmate(boardstate: list[list[Tile]], side: bool, checking_piece: str, a_row: int, a_col: int, k_row: int,
+                 k_col: int) -> bool:
+    print(1206,
+          f"is checkmate called, checking if the piece at {index_column(a_col)}{a_row + 3} is checkmating the opposing king")
     skip_block_checks = False
-    if GameArray[k_row][k_col].piece.lower() != "k":
+    if boardstate[k_row][k_col].piece.lower() != "k":
+        print(1261)
         return False
-    if checking_piece.isupper == GameArray[k_row][k_col].piece.isupper():
+    if checking_piece.isupper() == boardstate[k_row][k_col].piece.isupper():
+        print(1264)
         return False
     if checking_piece.lower() == "n":  # if the checking piece is a knight, no need to check for blocking moves
+        print(1267)
         skip_block_checks = True
-    if under_attack(Side, a_row, a_col):  # if the checking piece can be captured, it's not check
+    if under_attack(boardstate, side, a_row, a_col):  # if the checking piece can be captured, it's not check
         print(1043, "can capture attacker")
         return False
     for row_offset in [-1, 0, 1]:
@@ -1163,55 +1054,52 @@ def is_checkmate(checking_piece: str, a_row: int, a_col: int, k_row: int, k_col:
             row = row_offset + k_row
             if row_offset == 0 and col_offset == 0:
                 continue
-            elif 7 >= col >= 0:
-                continue
-            elif 7 >= row >= 0:
-                continue
-            else:
-                square_piece_legal = GameArray[row][col].piece != " " and GameArray[row][col].piece.isupper() != \
-                                     GameArray[k_row][k_col].piece.isupper() and not under_attack(not Side, row, col)
-                square_piece_empty = GameArray[row][col].piece == " " and not under_attack(not Side, row, col)
+            elif 7 >= col >= 0 and 7 >= row >= 0:
+                square_piece_legal = boardstate[row][col].piece != " " and boardstate[row][col].piece.isupper() != \
+                                     boardstate[k_row][k_col].piece.isupper() and not under_attack(boardstate, side,
+                                                                                                   row, col)
+                square_piece_empty = boardstate[row][col].piece == " " and not under_attack(boardstate, side, row, col)
                 if square_piece_empty or square_piece_legal:  # if empty space adjacent, and not under check, the king can move out of check
                     return False
     if not skip_block_checks:
-        potential_blockers = calculate_squares_between(Side, a_row, a_col, k_row, k_col)
+        potential_blockers = calculate_squares_between(not side, a_row, a_col, k_row, k_col)
         for i in range(len(potential_blockers)):
+            test_2 = copy.deepcopy(boardstate)
             row_1 = potential_blockers[i][0][0]
             row_2 = potential_blockers[i][1][0]
             col_1 = potential_blockers[i][0][1]
             col_2 = potential_blockers[i][1][1]
-            moving_piece = GameArray[row_1][col_1].piece
-            moving_move = GameArray[row_1][col_1].move
-            GameArray[row_2][col_2].piece = GameArray[row_1][col_1].piece
-            GameArray[row_2][col_2].move = GameArray[row_1][col_1].move
-            GameArray[row_1][col_1].piece = " "
-            GameArray[row_1][col_1].move = 0
-            if not under_attack(Side, k_row, k_col):
-                return True
-            else:
-                GameArray[row_2][col_2].piece = " "
-                GameArray[row_2][col_2].move = 0
-                GameArray[row_1][col_1].piece = moving_piece
-                GameArray[row_1][col_1].move = moving_move
+            test_2[row_2][col_2].piece = test_2[row_1][col_1].piece
+            test_2[row_2][col_2].move = test_2[row_1][col_1].move
+            test_2[row_1][col_1].piece = " "
+            test_2[row_1][col_1].move = 0
+            if not under_attack(test_2, not side, k_row, k_col):
+                return False
         return True
     else:
         return True
 
 
-def is_stalemate() -> bool:
+def is_stalemate(boardstate: list[list[Tile]]) -> bool:
+    # print(1259, "is stalemate called for the current board")
     white_stalemated = True
-    black_stalemated = True
+    black_stalemated = None
+    # print(1254)
     for i in range(8):
+        # print(1255)
         for j in range(8):
-            if GameArray[i][j].piece.isupper():
-                if has_moves(i, j):
-                    print(1068, f"white side has moves from piece at ({i}, {j})")
+            # print(1272)
+            moves = has_moves(boardstate, i, j)
+            # print(1274, index_column(j), i, moves, boardstate[i][j].piece)
+            if boardstate[i][j].piece.isupper() and boardstate[i][j].piece != " ":
+                if len(moves) != 0:
+                    print(1277, f"white side has moves from piece at ({index_column(j)}{i + 1}: {moves})")
                     white_stalemated = False
-            if GameArray[i][j].piece.islower():
-                if has_moves(i, j):
-                    print(1072, f"black side has moves from piece at ({i}, {j})")
+            if boardstate[i][j].piece.islower() and boardstate[i][j].piece != " ":
+                if len(moves) != 0:
+                    print(1281, f"black side has moves from piece at ({index_column(j)}{i + 1}: {moves})")
                     black_stalemated = False
-
+    print(1330, white_stalemated, black_stalemated)
     return white_stalemated or black_stalemated
 
 
@@ -1221,8 +1109,7 @@ def calculate_squares_between(side: bool, a_row: int, a_col: int, k_row: int, k_
     hold two 3rd tier lists, each one of which contains a pair of coords [row, col] the therefor [0][0][0] would get the
     first pair of coordinates, the first coordinate (which is the starting position of a piece that could block check)
     and then grab the row from that coord"""
-    global CheckMoveLegality
-    CheckMoveLegality = True
+    print(1286, "Calculate squares between called")
     row_diff = a_row - k_row
     col_diff = a_col - k_col
     move_output = []
@@ -1245,18 +1132,18 @@ def calculate_squares_between(side: bool, a_row: int, a_col: int, k_row: int, k_
     for pos_move in range(1, distance):
         pos_move_row = a_row + pos_move * row_direct  # these are the squares in line with the check
         pos_move_col = a_col + pos_move * col_direct
-        if under_attack(side, pos_move_row, pos_move_col):
-            for coord in AttackingCoords:
+        if under_attack(GameArray, side, pos_move_row, pos_move_col):
+            for coord in attacking_coords:
                 coord_pair = [coord, [pos_move_row, pos_move_col]]
                 move_output.append(coord_pair)
 
-    CheckMoveLegality = False
     return move_output  # This is a list of all potential pieces (their coordinates) that could theoretically block the line of attack between the two given coordinate sets, paired with the square they would move to
 
 
 def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type) -> bool:
     """Moves piece from coord_1 to coord_2, and checks for legality, and game results. Returns False if illegal"""
     global MoveCount, MoveList, Side, GameArray, Root, ContentFrame, GameEnd, CheckmateLabel, MoveInputList
+    print(1323, f"piece move called for the move {index_column(column_1)}{row_1}{index_column(column_2)}{row_2}")
     undo = False
     k_row = None
     k_col = None
@@ -1303,7 +1190,7 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
         if promotion is None:
             GameArray[row_2][column_2].piece = backup_piece_1
 
-        GameArray[row_2][column_2].move = backup_move_1  # normal movement block
+        GameArray[row_2][column_2].move = backup_move_1 + 1  # normal movement block
         GameArray[row_1][column_1].piece = " "
         GameArray[row_1][column_1].move = 0
     else:
@@ -1323,7 +1210,7 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
     if k_row is None or k_col is None or enemy_k_row is None or enemy_k_col is None:
         undo = True
     else:
-        if under_attack(Side, k_row, k_col) or undo:
+        if under_attack(GameArray, Side, k_row, k_col) or undo:
             print("puts in check/illegal move")
             GameArray[row_2][column_2].piece = backup_piece_2
             GameArray[row_2][column_2].move = backup_move_2
@@ -1341,13 +1228,14 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
                 moves_since_pawn = 0
         moves_since_pawn += 1
 
-    if under_attack(not Side, enemy_k_row, enemy_k_col):
-        for coords in AttackingCoords:
+    if under_attack(GameArray, not Side, enemy_k_row, enemy_k_col):
+        print(1464, "enemy king in check")
+        for coords in attacking_coords:
             print(coords)
             attacker = GameArray[coords[0]][coords[1]].piece
             a_row = coords[0]
             a_col = coords[1]
-            if is_checkmate(attacker, a_row, a_col, enemy_k_row, enemy_k_col):
+            if is_checkmate(GameArray, Side, attacker, a_row, a_col, enemy_k_row, enemy_k_col):
                 print("Checkmate!")
                 if Side:
                     color = "white"
@@ -1358,13 +1246,15 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
     if not ended and moves_since_pawn >= 100:
         pgn_str = "Draw: 50 move rule"
         ended = True
-    if not ended and is_stalemate():
+    if not ended and is_stalemate(GameArray):
+        print(1416, "stalemate")
         pgn_str = "Stalemate: draw"
         ended = True
     if not ended and is_threefold(current_fen):
         pgn_str = "Threefold Repetition: draw"
         ended = True
     if ended:
+        print(1423, "ended")
         MoveList.append(f"{pgn_1}{pgn_column}{row_2 + 1}")
         MoveList.append(pgn_str)
         save_game()
@@ -1389,6 +1279,7 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
             Side = not Side
             return True
     else:
+        print(1447, "standard move")
         Side = not Side
         MoveInputList.append(f"{piece_type}{MoveInput}")
         MoveList.append(f"{pgn_1}{pgn_column}{row_2 + 1}")
@@ -1397,6 +1288,7 @@ def piece_move(column_1: int, column_2: int, row_1: int, row_2: int, piece_type)
 
 
 def save_game():
+    print(1467, "game saved")
     pgn_str = ""
     if MoveCount > 0:
         now = datetime.datetime.now()  # Gets the current timestamp
@@ -1456,7 +1348,7 @@ def bishop_move() -> bool:
     piece_type = GameArray[start_row][start_column].piece
     target_piece = GameArray[target_row][target_column].piece
     legal_target = (
-                               piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "b"  # true if legal move
+                           piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "b"  # true if legal move
 
     if target_row < start_row:
         row_direction = -1
@@ -1486,7 +1378,7 @@ def queen_move() -> bool:
     piece_type = GameArray[start_row][start_column].piece
     target_piece = GameArray[target_row][target_column].piece
     legal_target = (
-                               piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "q"  # true if legal move
+                           piece_type.isupper() != target_piece.isupper() or target_piece == " ") and piece_type.lower() == "q"  # true if legal move
 
     if target_row < start_row:
         row_direction = -1
@@ -1526,6 +1418,7 @@ def queen_move() -> bool:
 
 def knight_move() -> bool:
     """Logic for legal knight moves"""
+    print(1597, "knight move called")
     start_column = column_index(MoveInput[0])
     start_row = int(MoveInput[1]) - 1
     target_column = column_index(MoveInput[2])
@@ -1533,7 +1426,7 @@ def knight_move() -> bool:
     piece_type = GameArray[start_row][start_column].piece
     target_piece = GameArray[target_row][target_column].piece
     legal_target = (
-                               target_piece.isupper() != piece_type.isupper() or target_piece == " ") and piece_type.lower() == "n"  # checks if the target square is empty or an opponent's piece
+                           target_piece.isupper() != piece_type.isupper() or target_piece == " ") and piece_type.lower() == "n"  # checks if the target square is empty or an opponent's piece
 
     if target_row >= start_row:  # determines whether the row direction is up or down
         row_direction = 1
@@ -1596,26 +1489,28 @@ def pawn_move() -> bool:
 
     empty_target = target_piece == " "
     is_straight = start_column == target_column
-    row_distance = 2 >= abs(start_row - target_row) >= 1
+    distance = abs(start_row - target_row)
+    row_distance = 2 >= distance >= 1
     right_way = pawn_side * abs(start_row - target_row) + start_row == target_row
     is_diag = abs(start_row - target_row) == abs(start_column - target_column) == 1
     is_opponent = piece_type.isupper() != target_piece.isupper() and target_piece != " "
 
     legal_target_attack = is_diag and right_way and is_opponent  # True if legal for attacking a piece directly diagonal one square left or right
-    legal_target_move = is_straight and right_way and empty_target and row_distance
+    legal_target_move = is_straight and right_way and empty_target and row_distance and row_distance
 
-    print(1290, is_diag, right_way, is_opponent, "\n", is_straight, right_way, empty_target, row_distance)
+    print(1290, is_diag, right_way, is_opponent, "\n", is_straight, right_way, empty_target, distance, first_move)
 
     if legal_target_attack or legal_target_move:  # Normal move or attack
-        return piece_move(start_column, target_column, start_row, target_row, piece_type)
+        if distance == 1 or distance == 2 and first_move:
+            return piece_move(start_column, target_column, start_row, target_row, piece_type)
 
     # En Passant logic:
     try:
-        last_move_row_1 = int(MoveInputList[-1][2]) - 1
-        last_move_row_2 = int(MoveInputList[-1][4]) - 1
+        last_move_row_1 = int(MoveInputList[-1][1]) - 1
+        last_move_row_2 = int(MoveInputList[-1][3]) - 1
         last_move_double = abs(last_move_row_1 - last_move_row_2) == 2
         last_move_piece = MoveInputList[-1][0].lower() == "p"
-        last_move_col = column_index(MoveInputList[-1][1])
+        last_move_col = column_index(MoveInputList[-1][0])
         print(1303, MoveInputList[-1])
     except ValueError:
         last_move_double = False
@@ -1632,7 +1527,7 @@ def pawn_move() -> bool:
                 passant_col = True
         if passant_col and passant_row:
             piece_move(start_column, target_column, start_row, target_row, piece_type)  # Moves the pawn
-            print(1299, last_move_col, last_move_row_2)
+            # print(1299, last_move_col, last_move_row_2)
             GameArray[last_move_row_2][last_move_col].piece = " "  # Removes the pawn captured by en passant
             GameArray[last_move_row_2][last_move_col].move = 0
             return True
@@ -1661,20 +1556,328 @@ def castle(long: bool) -> bool:
 
     king_legal = GameArray[i][4].piece == king and GameArray[i][4].move == 0
     rook_legal = GameArray[i][rook_i].piece == rook and GameArray[i][rook_i].move == 0
-    checks = not under_attack(king.isupper(), i, 4) and not under_attack(king.isupper(), i,
-                                                                         king_j) and not under_attack(king.isupper(), i,
-                                                                                                      rook_j)
+    checks = not under_attack(GameArray, king.isupper(), i, 4) and not under_attack(GameArray, king.isupper(), i,
+                                                                                    king_j) and not under_attack(
+        GameArray, king.isupper(), i, rook_j)
     clear = GameArray[i][rook_j].piece == " " and GameArray[i][king_j].piece == " " and extra_clear
-    print(1350, king_legal, rook_legal, checks, clear, GameArray[i][4].move == 0, GameArray[i][4].piece == king)
+    # print(1350, king_legal, rook_legal, checks, clear, GameArray[i][4].move == 0, GameArray[i][4].piece == king)
 
     if king_legal and rook_legal and checks and clear:
         piece_move(4, king_j, i, i, king)
+        Side = not Side
         piece_move(rook_i, rook_j, i, i, rook)
         return True
     else:
         return False
 
 
+def evaluate_position(boardstate: list[list[Tile]]) -> int:
+    """Evaluates a position based on material, negative if black is winning"""
+    evaluation = 0
+    pawn_table = [
+        [0,  0,  0,  0,  0,  0,  0,  0],
+        [50, 50, 50, 50, 50, 50, 50, 50],
+        [10, 10, 20, 30, 30, 20, 10, 10],
+        [5,  5, 10, 25, 25, 10,  5,  5],
+        [0,  0,  0, 20, 20,  0,  0,  0],
+        [5, -5, -10,  0,  0, -10, -5,  5],
+        [5, 10, 10, -20, -20, 10, 10,  5],
+        [0,  0,  0,  0,  0,  0,  0,  0]
+    ]
+    knight_table = [
+        [-50, -40, -30, -30, -30, -30, -40, -50],
+        [-40, -20, 0, 0, 0, 0, -20, -40],
+        [-30, 0, 10, 15, 15, 10, 0, -30],
+        [-30, 5, 15, 20, 20, 15, 5, -30],
+        [-30, 0, 15, 20, 20, 15, 0, -30],
+        [-30, 5, 10, 15, 15, 10, 5, -30],
+        [-40, -20, 0, 5, 5, 0, -20, -40],
+        [-50, -40, -30, -30, -30, -30, -40, -50]
+    ]
+    bishop_table = [
+        [-20, -10, -10, -10, -10, -10, -10, -20],
+        [-10, 0, 0, 0, 0, 0, 0, -10],
+        [-10, 0, 5, 10, 10, 5, 0, -10],
+        [-10, 5, 5, 10, 10, 5, 5, -10],
+        [-10, 0, 10, 10, 10, 10, 0, -10],
+        [-10, 10, 10, 10, 10, 10, 10, -10],
+        [-10, 5, 0, 0, 0, 0, 5, -10],
+        [-20, -10, -10, -10, -10, -10, -10, -20]
+    ]
+    rook_table = [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [5, 10, 10, 10, 10, 10, 10, 5],
+        [-5, 0, 0, 0, 0, 0, 0, -5],
+        [-5, 0, 0, 0, 0, 0, 0, -5],
+        [-5, 0, 0, 0, 0, 0, 0, -5],
+        [-5, 0, 0, 0, 0, 0, 0, -5],
+        [-5, 0, 0, 0, 0, 0, 0, -5],
+        [0, 0, 0, 5, 5, 0, 0, 0]
+    ]
+    queen_table = [
+        [-20, -10, -10, -5, -5, -10, -10, -20],
+        [-10, 0, 0, 0, 0, 0, 0, -10],
+        [-10, 0, 5, 5, 5, 5, 0, -10],
+        [-5, 0, 5, 5, 5, 5, 0, -5],
+        [0, 0, 5, 5, 5, 5, 0, -5],
+        [-10, 5, 5, 5, 5, 5, 0, -10],
+        [-10, 0, 5, 0, 0, 0, 0, -10],
+        [-20, -10, -10, -5, -5, -10, -10, -20]
+    ]
+    king_table_mid = [
+        [-30, -40, -40, -50, -50, -40, -40, -30],
+        [-30, -40, -40, -50, -50, -40, -40, -30],
+        [-30, -40, -40, -50, -50, -40, -40, -30],
+        [-30, -40, -40, -50, -50, -40, -40, -30],
+        [-20, -30, -30, -40, -40, -30, -30, -20],
+        [-10, -20, -20, -20, -20, -20, -20, -10],
+        [20, 20, 0, 0, 0, 0, 20, 20],
+        [20, 30, 10, 0, 0, 10, 30, 20]
+    ]
+    king_table_end = [
+        [-50, -40, -30, -20, -20, -30, -40, -50],
+        [-30, -20, -10, 0, 0, -10, -20, -30],
+        [-30, -10, 20, 30, 30, 20, -10, -30],
+        [-30, -10, 30, 40, 40, 30, -10, -30],
+        [-30, -10, 30, 40, 40, 30, -10, -30],
+        [-30, -10, 20, 30, 30, 20, -10, -30],
+        [-30, -30, 0, 0, 0, 0, -30, -30],
+        [-50, -30, -30, -30, -30, -30, -30, -50]
+    ]
+
+    # if checkmate, count evaluation = 20000 etc
+    for i in range(8):
+        for j in range(8):
+            piece = boardstate[i][j].piece
+            count = 0
+            if piece.isupper():
+                table_y = 7 - i
+                table_x = j
+            else:
+                table_y = i
+                table_x = j
+            if piece.lower() == "p":
+                count = 100 + pawn_table[table_y][table_x]
+            elif piece.lower() == "n":
+                count = 320 + knight_table[table_y][table_x]
+            elif piece.lower() == "b":
+                count = 330 + bishop_table[table_y][table_x]
+            elif piece.lower() == "r":
+                count = 500 + rook_table[table_y][table_x]
+            elif piece.lower() == "q":
+                count = 900 + queen_table[table_y][table_x]
+            elif piece.lower() == "k":
+                count = king_table_mid[table_y][table_x]
+            else:
+                pass
+            if piece.isupper():
+                evaluation += count
+                count = 0
+            if piece.islower():
+                evaluation -= count
+                count = 0
+    return evaluation
+
+
+# def minimax():
+
+
+def simple_update(boardstate: list[list[Tile]], start_row: int, start_col: int, end_row: int, end_col: int) -> list[list[Tile]]:
+    boardstate[end_row][end_col].piece = boardstate[start_row][start_col].piece
+    boardstate[end_row][end_col].move = boardstate[start_row][start_col].move
+    boardstate[start_row][start_col].piece = " "
+    boardstate[start_row][start_col].move = 0
+    return boardstate
+
+
+def engine_move(boardstate_real: list[list[Tile]], side: bool) -> str:
+    global TotalEngineMs, TotalMoveCalcs
+    boardstate2 = copy.deepcopy(boardstate_real)  # copy.deepcopy(boardstate_real)
+    possible_moves_1 = []
+    possible_moves_2 = [[] for _ in range(6400)]
+    start = time.process_time()
+    # first layer
+    for row in range(8):
+        for col in range(8):
+            if boardstate2[row][col].piece != " " and boardstate2[row][col].piece.isupper() == side:
+                for coord in has_moves(boardstate2, row, col):
+                    TotalMoveCalcs += 1
+                    possible_moves_1.append([f"{index_column(col)}{row + 1}{coord}"])
+
+    count = 0
+    side = not side
+    # second layer
+    for first_move in possible_moves_1:
+        if side:
+            mod = -10000
+        else:
+            mod = 10000
+        eval_list = [mod for i in range(256)]
+        count_2 = 0
+        boardstate2 = copy.deepcopy(boardstate2)
+        start_row = int(first_move[0][1]) - 1
+        start_col = int(column_index(first_move[0][0]))
+        end_row = int(first_move[0][3]) - 1
+        end_col = int(column_index(first_move[0][2]))
+        boardstate2 = simple_update(boardstate2, start_row, start_col, end_row, end_col)
+        k = 0 if not side else 7
+        queen = "c" if end_col == 2 else "g"
+        if first_move == f"e{k + 1}{queen}{k + 1}":
+            if queen == "c":
+                boardstate2 = simple_update(boardstate2, k, 0, k, 3)
+            else:
+                boardstate2 = simple_update(boardstate2, k, 7, k, 5)
+
+        for row in range(8):
+            for col in range(8):
+                if boardstate2[row][col].piece != " " and boardstate2[row][col].piece.isupper() == side:
+                    for coord in has_moves(boardstate2, row, col):
+                        TotalMoveCalcs += 1
+                        possible_moves_2[count] = [first_move[0], f"{index_column(col)}{row + 1}{coord}"]
+                        count += 1
+                        count_2 += 1
+
+    side = not side
+    minimax_1 = {}
+    count = 0
+
+    for second_move in possible_moves_2:
+        if not second_move:
+            continue
+        if side:
+            mod = -10000
+        else:
+            mod = 10000
+        eval_list = [mod for i in range(256)]
+        count_2 = 0
+        row_s1 = int(second_move[0][1]) - 1
+        col_s1 = int(column_index(second_move[0][0]))
+        row_e1 = int(second_move[0][3]) - 1
+        col_e1 = int(column_index(second_move[0][2]))
+
+        row_s2 = int(second_move[1][1]) - 1
+        col_s2 = int(column_index(second_move[1][0]))
+        row_e2 = int(second_move[1][3]) - 1
+        col_e2 = int(column_index(second_move[1][2]))
+
+        save_piece_target1 = boardstate2[row_e1][col_e1].piece
+        save_piece_start1 = boardstate2[row_s1][col_s1].piece
+        save_move_target1 = boardstate2[row_e1][col_e1].move
+        save_move_start1 = boardstate2[row_s1][col_s1].move
+
+        save_piece_target2 = boardstate2[row_e2][col_e2].piece
+        save_piece_start2 = boardstate2[row_s2][col_s2].piece
+        save_move_target2 = boardstate2[row_e2][col_e2].move
+        save_move_start2 = boardstate2[row_s2][col_s2].move
+
+        save_piece_target3 = " "
+        save_piece_start3 = " "
+        save_move_target3 = 0
+        save_move_start3 = 0
+
+        print(save_piece_target1, save_piece_start1, save_move_target1, save_move_start1)
+        print(save_piece_target2, save_piece_start2, save_move_target2, save_move_start2)
+
+        did_castle = False
+        is_queenside = False
+        for i in [0, 1]:
+            start_row = int(second_move[i][1]) - 1
+            start_col = int(column_index(second_move[i][0]))
+            end_row = int(second_move[i][3]) - 1
+            end_col = int(column_index(second_move[i][2]))
+            boardstate2 = simple_update(boardstate2, start_row, start_col, end_row, end_col)
+            k = 0 if not side else 7
+            queen = "c" if end_col == 2 else "g"
+            if second_move[i] == f"e{k + 1}{queen}{k + 1}":
+                did_castle = True
+                if queen == "c":
+                    boardstate2 = simple_update(boardstate2, k, 0, k, 3)
+                    save_piece_target3 = boardstate2[k][3].piece
+                    save_piece_start3 = boardstate2[k][0].piece
+                    save_move_target3 = boardstate2[k][3].move
+                    save_move_start3 = boardstate2[k][0].move
+                    is_queenside = True
+                else:
+                    boardstate2 = simple_update(boardstate2, k, 7, k, 5)
+                    save_piece_target3 = boardstate2[k][5].piece
+                    save_piece_start3 = boardstate2[k][7].piece
+                    save_move_target3 = boardstate2[k][5].move
+                    save_move_start3 = boardstate2[k][7].move
+                    is_queenside = False
+
+        for row in range(8):
+            for col in range(8):
+                if boardstate2[row][col].piece != " " and boardstate2[row][col].piece.isupper() == side:
+                    for coord in has_moves(boardstate2, row, col):
+                        TotalMoveCalcs += 1
+                        row_2 = int(coord[1]) - 1
+                        col_2 = int(column_index(coord[0]))
+                        save_piece_target = boardstate2[row_2][col_2].piece
+                        save_piece_start = boardstate2[row][col].piece
+                        save_move_target = boardstate2[row_2][col_2].move
+                        save_move_start = boardstate2[row][col].move
+                        boardstate2 = simple_update(boardstate2, row, col, row_2, col_2)
+                        pos_eval = evaluate_position(boardstate2)
+                        boardstate2[row_2][col_2].piece = save_piece_target
+                        boardstate2[row][col].piece = save_piece_start
+                        boardstate2[row_2][col_2].move = save_move_target
+                        boardstate2[row][col].move = save_move_start
+                        eval_list[count_2] = pos_eval
+                        count_2 += 1
+        if not side:  # if the engine is playing black
+            eval_list.sort(reverse=False)
+            print(eval_list)
+        if side:
+            eval_list.sort(reverse=True)
+        minimax_1.update({str(second_move[0]): eval_list[0]})
+
+        boardstate2[row_e2][col_e2].piece = save_piece_target2
+        boardstate2[row_s2][col_s2].piece = save_piece_start2
+        boardstate2[row_e2][col_e2].move = save_move_target2
+        boardstate2[row_s2][col_s2].move = save_move_start2
+
+        boardstate2[row_e1][col_e1].piece = save_piece_target1
+        boardstate2[row_s1][col_s1].piece = save_piece_start1
+        boardstate2[row_e1][col_e1].move = save_move_target1
+        boardstate2[row_s1][col_s1].move = save_move_start1
+
+        if did_castle:
+            if is_queenside:
+                boardstate2[k][3].piece = save_piece_target3
+                boardstate2[k][0].piece = save_piece_start3
+                boardstate2[k][3].move = save_move_target3
+                boardstate2[k][0].move = save_move_start3
+            else:
+                boardstate2[k][5].piece = save_piece_target3
+                boardstate2[k][7].piece = save_piece_start3
+                boardstate2[k][5].move = save_move_target3
+                boardstate2[k][7].move = save_move_start3
+            did_castle = False
+
+    print(1901, minimax_1)
+    best_eval = 100000000
+    if not side:  # this will run if the engine is playing a black move
+        #  look for lowest positive eval
+        best_eval = min(minimax_1.values())
+        print(1885, "best eval", best_eval)
+    if side:  # this will run if the engine is playing a white move
+        # look for highest negative eval
+        best_eval = max(minimax_1.values())
+        print(1890, "best eval", best_eval)
+    top_moves = [move for move, val in minimax_1.items() if val == best_eval]
+    print(1909, top_moves, "\n1909.2", minimax_1)
+    print(1884, possible_moves_1, "\n1884.2", possible_moves_2)
+    print(1892, best_eval, type(best_eval), repr(best_eval))
+    move_random = random.randint(0, len(top_moves) - 1)
+    end = time.process_time()
+    TotalEngineMs += (end-start) * 1000
+    print(1877, count, (end - start), TotalMoveCalcs, TotalEngineMs, count)
+    return top_moves[move_random]
+
+
 if __name__ == "__main__":
-    game_init("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq")
+    TotalMoveCalcs = 0
+    test_fen = "5b1K/4k3/5n2/4n3/8/8/8/8 b KQkq"
+    standard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq"
+    game_init(standard)
     save_game()
